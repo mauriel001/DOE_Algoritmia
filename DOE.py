@@ -1,25 +1,3 @@
-"""
-Ejercicio 1 - Ajuste del parámetro de temperatura del Recocido Simulado (SA)
-con Metodología de Superficie de Respuesta (RSM, Opción B).
-
-Resumen del diseño
-  - Algoritmo : Recocido Simulado con vecindario 2-opt sobre el TSP.
-  - Factor    : temperatura inicial T0 (5 niveles: axial bajo, bajo, centro, alto, axial alto).
-  - Bloque    : tamaño del problema n in {5, 10, 15} (una instancia por tamaño).
-  - Réplicas  : REP_EXTERNOS corridas en cada punto externo y REP_CENTRO en el centro
-                (por defecto 5 y 10 -> 30 corridas por tamaño, 90 en total).
-  - Modelo    : Costo = b0 + b1*T + b2*T^2 (uno por tamaño), con ANOVA de regresión,
-                falta de ajuste vs error puro, y T* = -b1 / (2*b2).
-  - Bootstrap : mediana (IC 95%) del costo en cada punto de diseño.
-
-Presupuesto igual para todos los niveles: cada corrida hace PASOS cambios de temperatura
-y ITERS_POR_TEMP iteraciones por temperatura, enfriando de forma geométrica desde T0
-hasta T_FINAL. Así lo único que cambia entre niveles es T0 (no el esfuerzo de cómputo).
-
-Uso:
-    pip install numpy pandas scipy matplotlib        (statsmodels es opcional)
-    python sa_rsm_temperatura.py
-"""
 
 import math
 import random
@@ -29,40 +7,35 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy import stats
 
-# =====================================================================
-# PARÁMETROS DEL EXPERIMENTO  (edita aquí)
-# =====================================================================
-MATRICULA = 2068543            # <-- CAMBIA ESTO por tu matrícula (fija tu valor de r)
-TAMANOS = [5, 10, 15]         # bloques: tamaño del TSP
-T_MIN, T_MAX = 0.5, 25.0      # rango de temperatura que defines tú (elegido con un barrido
-                              # piloto: las T0 buenas están por debajo de ~10 en estos TSP)
-REP_EXTERNOS = 5              # réplicas en axial bajo, bajo, alto, axial alto
-REP_CENTRO = 10               # réplicas en el punto central (error puro)
-                              # (usa REP_EXTERNOS = 10 si quieres 50 obs. por tamaño)
 
-PASOS = 30                    # cambios de temperatura por corrida
-ITERS_POR_TEMP = 5            # iteraciones por cada temperatura (presupuesto = 150)
-                              # OJO: con presupuestos grandes el SA llega al óptimo con
-                              # cualquier T0 y el experimento no puede distinguir niveles.
-T_FINAL = 0.01                # temperatura final (igual para todos los niveles)
+MATRICULA = 2068543            
+TAMANOS = [5, 10, 15]         
+T_MIN, T_MAX = 0.5, 25.0      
+                              
+REP_EXTERNOS = 5             
+REP_CENTRO = 10               
+                              
 
-BOOTSTRAP_B = 5000            # remuestreos para el IC de la mediana
-ALFA = 0.05                   # nivel de significancia
+PASOS = 30                    
+ITERS_POR_TEMP = 5            
+                              
+                              
+T_FINAL = 0.01                
 
-# ---- Valor aleatorio r: se genera UNA sola vez y se usa en todo el experimento ----
+BOOTSTRAP_B = 5000            
+ALFA = 0.05                   
+
 random.seed(MATRICULA)
 R = random.random()
 
-# Fracciones del rango para los 5 niveles (Opción B)
+
 NOMBRES_NIVEL = ["axial bajo", "bajo", "centro", "alto", "axial alto"]
 FRACCIONES = [0.2 * R, 0.2 * R + 0.2, 0.2 * R + 0.4, 0.2 * R + 0.6, 0.2 * R + 0.8]
 NIVELES_T = [T_MIN + f * (T_MAX - T_MIN) for f in FRACCIONES]
 REPLICAS = [REP_EXTERNOS, REP_EXTERNOS, REP_CENTRO, REP_EXTERNOS, REP_EXTERNOS]
 
 
-# =====================================================================
-# TSP y Recocido Simulado
-# =====================================================================
+
 def generar_instancia(n, semilla):
     rng = random.Random(semilla)
     ciudades = [(rng.uniform(0, 100), rng.uniform(0, 100)) for _ in range(n)]
@@ -75,7 +48,7 @@ def longitud_tour(tour, d):
 
 
 def optimo_held_karp(d):
-    """Longitud óptima exacta (solo como referencia; n <= 15 es rápido)."""
+ 
     n = len(d)
     m = n - 1
     INF = math.inf
@@ -98,10 +71,7 @@ def optimo_held_karp(d):
 
 
 def recocido_simulado(d, T0, semilla):
-    """
-    SA con movimiento 2-opt aleatorio y enfriamiento geométrico T0 -> T_FINAL en PASOS pasos.
-    Devuelve la mejor longitud encontrada (el 'costo' de la corrida).
-    """
+
     rng = random.Random(semilla)
     n = len(d)
     tour = list(range(n))
@@ -128,11 +98,9 @@ def recocido_simulado(d, T0, semilla):
     return mejor
 
 
-# =====================================================================
-# Estadística: regresión cuadrática, ANOVA, falta de ajuste, bootstrap
-# =====================================================================
+
 def ajustar_cuadratico(T, y):
-    """OLS de y = b0 + b1*T + b2*T^2. Devuelve dict con coeficientes, p-values y ANOVA."""
+
     T, y = np.asarray(T, float), np.asarray(y, float)
     N = len(y)
     X = np.column_stack([np.ones(N), T, T ** 2])
@@ -146,7 +114,7 @@ def ajustar_cuadratico(T, y):
     out = dict(beta=beta, N=N, sse=sse, sst=sst, ssr=ssr, gl_res=gl_res,
                r2=(ssr / sst) if sst > 0 else np.nan)
 
-    if sse < 1e-12 or sst < 1e-12:      # sin variación: no hay nada que modelar
+    if sse < 1e-12 or sst < 1e-12:     
         out["r2"] = np.nan
         out.update(p_coef=[np.nan] * 3, F=np.nan, p_F=np.nan, degenerado=True)
         return out
@@ -163,7 +131,7 @@ def ajustar_cuadratico(T, y):
 
 
 def falta_de_ajuste(df_n, ajuste):
-    """F de falta de ajuste: separa error puro (réplicas) del error del modelo."""
+    
     N = ajuste["N"]
     k = df_n["nivel"].nunique()
     sspe = float(sum(((g["costo"] - g["costo"].mean()) ** 2).sum()
@@ -180,7 +148,7 @@ def falta_de_ajuste(df_n, ajuste):
 
 
 def bootstrap_mediana(x, rng, B=BOOTSTRAP_B):
-    """Mediana y su IC 95% (percentil) por bootstrap."""
+  
     x = np.asarray(x, float)
     muestras = rng.choice(x, size=(B, len(x)), replace=True)
     meds = np.median(muestras, axis=1)
@@ -191,9 +159,7 @@ def fmt_p(p):
     return "  n/d  " if np.isnan(p) else (" <0.001" if p < 0.001 else f"{p:7.3f}")
 
 
-# =====================================================================
-# Programa principal
-# =====================================================================
+
 if __name__ == "__main__":
     print("=" * 78)
     print("DOE / RSM - Temperatura inicial del Recocido Simulado (TSP con 2-opt)")
@@ -209,7 +175,7 @@ if __name__ == "__main__":
     print(f"Presupuesto por corrida: {PASOS} pasos x {ITERS_POR_TEMP} iteraciones "
           f"= {PASOS * ITERS_POR_TEMP}  (T_final = {T_FINAL})")
 
-    # ---------------- 1) Correr el experimento ----------------
+   
     filas, instancias = [], {}
     for n in TAMANOS:
         d = generar_instancia(n, semilla=MATRICULA + n)
@@ -217,7 +183,7 @@ if __name__ == "__main__":
         for idx, (nom, f, T0, rep) in enumerate(zip(NOMBRES_NIVEL, FRACCIONES,
                                                     NIVELES_T, REPLICAS)):
             for r_i in range(rep):
-                semilla = MATRICULA * 100_000 + n * 1_000 + idx * 100 + r_i   # única por corrida
+                semilla = MATRICULA * 100_000 + n * 1_000 + idx * 100 + r_i  
                 filas.append(dict(n=n, nivel=nom, fraccion=f, T=T0, rep=r_i + 1,
                                   costo=recocido_simulado(d, T0, semilla)))
     df = pd.DataFrame(filas)
@@ -227,7 +193,7 @@ if __name__ == "__main__":
     rng_boot = np.random.default_rng(MATRICULA)
     resumen_final, modelos = [], {}
 
-    # ---------------- 2) Análisis por tamaño ----------------
+
     for n in TAMANOS:
         df_n = df[df["n"] == n]
         opt = instancias[n][1]
@@ -239,7 +205,7 @@ if __name__ == "__main__":
         print(f"TAMAÑO n = {n}   (costo óptimo exacto de la instancia = {opt:.2f})")
         print("=" * 78)
 
-        # Bootstrap en cada punto de diseño
+        
         puntos = []
         print(f"{'Nivel':<11} | {'T0':>8} | {'Media':>8} | {'Mediana':>8} | "
               f"{'IC 95% de la mediana':>22}")
@@ -251,7 +217,7 @@ if __name__ == "__main__":
             print(f"{nom:<11} | {T0:8.3f} | {x.mean():8.2f} | {med:8.2f} | "
                   f"[{lo:8.2f}, {hi:8.2f}]")
 
-        # Modelo cuadrático
+       
         print(f"\nModelo ajustado:  Costo = {b0:.3f} + ({b1:.4f})*T + ({b2:.6f})*T^2")
         if aj["degenerado"]:
             print("  Los costos no varían (el algoritmo encontró siempre el mismo valor): "
@@ -287,7 +253,7 @@ if __name__ == "__main__":
             else:
                 print(f"  Curvatura NO significativa (p de b2 = {fmt_p(pc[2]).strip()}).")
 
-        # Temperatura óptima del modelo
+      
         T_star, valido, motivo = np.nan, False, ""
         if aj["degenerado"] or abs(b2) < 1e-15:
             motivo = "sin curvatura"
@@ -319,7 +285,7 @@ if __name__ == "__main__":
         modelos[n] = dict(beta=aj["beta"], puntos=puntos, aj=aj, lof=lof,
                           T_star=T_star, valido=valido)
 
-    # ---------------- 3) Tabla resumen ----------------
+    
     print("\n" + "=" * 100)
     print("TABLA RESUMEN (mejor punto de diseño según la mediana bootstrap)")
     print("=" * 100)
@@ -332,7 +298,7 @@ if __name__ == "__main__":
               f"[{r['ic_lo']:7.2f}, {r['ic_hi']:7.2f}] | {r['optimo']:8.2f} | {ts} | "
               f"{'sí' if r['T_star_valida'] else 'no':>9}")
 
-    # ---------------- 4) Tendencia entre n y T* ----------------
+  
     print("\nTENDENCIA ENTRE n Y LA TEMPERATURA ÓPTIMA")
     mejores = [(r["n"], r["mejor_T"]) for r in resumen_final]
     print("  Mejor nivel de diseño por tamaño: " +
@@ -348,7 +314,6 @@ if __name__ == "__main__":
         print("  Hay menos de 2 valores de T* confiables: la tendencia se debe leer del "
               "mejor nivel de diseño y de las gráficas.")
 
-    # ---------------- 5) Gráficas ----------------
     fig, axs = plt.subplots(1, len(TAMANOS), figsize=(5.5 * len(TAMANOS), 5), squeeze=False)
     rng_jit = np.random.default_rng(1)
     for ax, n in zip(axs[0], TAMANOS):
